@@ -15,15 +15,15 @@ var Decay = 0.996
 // NewKSBuffer initializes the buffer of size with random noise
 func NewKSBuffer(size uint) *KSBuffer {
 	// get a random number between -1.0 and 1.0
-	initialNode := KSBuffer{value: rand.Float64()*2.0 - 1.0}
+	initialNode := &KSBuffer{value: rand.Float64()*2.0 - 1.0}
 	currentNode := initialNode
 	for i := uint(0); i < size; i++ {
-		newNode := KSBuffer{value: rand.Float64()*2.0 - 1.0}
-		currentNode.next = &newNode
+		newNode := &KSBuffer{value: rand.Float64()*2.0 - 1.0}
+		currentNode.next = newNode
 		currentNode = newNode
 	}
-	currentNode.next = &initialNode // point back to the beginning
-	return &currentNode
+	currentNode.next = initialNode // point back to the beginning
+	return initialNode
 }
 
 // Value returns the value of the current member
@@ -32,8 +32,8 @@ func (buffer KSBuffer) Value() float64 {
 }
 
 // Next returns the next member of the buffer
-func (buffer KSBuffer) Next() KSBuffer {
-	return *buffer.next
+func (buffer KSBuffer) Next() *KSBuffer {
+	return buffer.next
 }
 
 // Update sets the value of the current member to the average of it
