@@ -2,6 +2,7 @@ package ksynth
 
 import (
 	"encoding/binary"
+	"math"
 	"os"
 )
 
@@ -37,13 +38,90 @@ func NewKarplusStrong(samplesPerSecond uint32, bitsPerSample uint8, numChannels 
 }
 
 // AddNote adds samples for the given note with frequency in Hz and duration in seconds to the internal data buffer
-func (ks *KarplusStrong) AddNote(frequency float64, duration float64) {
+func (ks *KarplusStrong) AddNote(frequency, duration float64) {
+	volume := scalingFactor * float64(uint64(1)<<(ks.bitsPerSample-1))
 	bufferSize := uint(float64(ks.samplesPerSecond)/frequency + 0.5)
 	numberSamples := int(float64(ks.samplesPerSecond)*duration + 0.5)
 	buffer := NewKSBuffer(bufferSize)
 	for i := 0; i < numberSamples; i++ {
 		val := buffer.Value()
-		volume := scalingFactor * float64(uint64(1)<<(ks.bitsPerSample-1))
+		for i := uint8(0); i < ks.numChannels; i++ { // write one sample for each channel
+			u32Sample := uint32(val * volume) // bits per sample only supported multiples of 8 up to 32
+			if ks.bitsPerSample == 8 {
+				u32Sample += (1 << 7) // 8-bit is offset encoded
+				u32Sample %= (1 << 8)
+			}
+			for i := uint8(0); i < ks.bitsPerSample/8; i++ {
+				ks.data = append(ks.data, byte(u32Sample&0xFF))
+				u32Sample = u32Sample >> 8
+			}
+		}
+		buffer.Update()
+		buffer = buffer.Next()
+	}
+}
+
+// AddSlide adds samples for the given note with frequencyInitial in Hz and durationInitial in seconds to the internal data buffer
+// then "slides" for durationSlide and adds samples for frequencyFinal in Hz and durationFinal in seconds
+func (ks *KarplusStrong) AddSlide(frequencyInitial, frequencyFinal, durationInitial, durationSlide, durationFinal float64) {
+	volume := scalingFactor * float64(uint64(1)<<(ks.bitsPerSample-1))
+
+	bufferSizeInitial := uint(float64(ks.samplesPerSecond)/frequencyInitial + 0.5)
+	numberSamplesInitial := int(float64(ks.samplesPerSecond)*durationInitial + 0.5)
+
+	bufferSizeFinal := uint(float64(ks.samplesPerSecond)/frequencyFinal + 0.5)
+	numberSamplesFinal := int(float64(ks.samplesPerSecond)*durationFinal + 0.5)
+
+	numberSamplesSlide := int(float64(ks.samplesPerSecond)*durationSlide + 0.5)
+	bufferDelta := int(bufferSizeFinal) - int(bufferSizeInitial)
+	numberOfSlideSamples := int(math.Ceil(math.Abs(float64(bufferDelta)) / float64(numberSamplesSlide)))
+	periodOfSlideSamples := int(math.Ceil(float64(numberSamplesSlide) / math.Abs(float64(bufferDelta))))
+	buffer := NewKSBuffer(bufferSizeInitial)
+	for i := 0; i < numberSamplesInitial; i++ {
+		val := buffer.Value()
+		for i := uint8(0); i < ks.numChannels; i++ { // write one sample for each channel
+			u32Sample := uint32(val * volume) // bits per sample only supported multiples of 8 up to 32
+			if ks.bitsPerSample == 8 {
+				u32Sample += (1 << 7) // 8-bit is offset encoded
+				u32Sample %= (1 << 8)
+			}
+			for i := uint8(0); i < ks.bitsPerSample/8; i++ {
+				ks.data = append(ks.data, byte(u32Sample&0xFF))
+				u32Sample = u32Sample >> 8
+			}
+		}
+		buffer.Update()
+		buffer = buffer.Next()
+	}
+
+	for i := 0; i < numberSamplesSlide; i++ {
+		val := buffer.Value()
+		for i := uint8(0); i < ks.numChannels; i++ { // write one sample for each channel
+			u32Sample := uint32(val * volume) // bits per sample only supported multiples of 8 up to 32
+			if ks.bitsPerSample == 8 {
+				u32Sample += (1 << 7) // 8-bit is offset encoded
+				u32Sample %= (1 << 8)
+			}
+			for i := uint8(0); i < ks.bitsPerSample/8; i++ {
+				ks.data = append(ks.data, byte(u32Sample&0xFF))
+				u32Sample = u32Sample >> 8
+			}
+		}
+		buffer.Update()
+		if i%periodOfSlideSamples == 0 {
+			for j := 0; j < numberOfSlideSamples; j++ {
+				if bufferDelta > 0 {
+					buffer.Insert() // add in samples for slide up
+				} else {
+					buffer.Delete() // delete samples for slide down
+				}
+			}
+		}
+		buffer = buffer.Next()
+	}
+
+	for i := 0; i < numberSamplesFinal; i++ {
+		val := buffer.Value()
 		for i := uint8(0); i < ks.numChannels; i++ { // write one sample for each channel
 			u32Sample := uint32(val * volume) // bits per sample only supported multiples of 8 up to 32
 			if ks.bitsPerSample == 8 {
@@ -100,6 +178,31 @@ func (ks KarplusStrong) WriteWAV(filename string) error {
 	}
 
 	return nil
+}
+
+// AddVibrato adds samples for the given note with frequency in Hz and duration in seconds to the internal data buffer
+// with vibrato at depth (% of semitone) and speed in Hz by inserting and deleting samples
+func (ks *KarplusStrong) AddVibrato(frequency, duration, depth, speed float64) {
+	volume := scalingFactor * float64(uint64(1)<<(ks.bitsPerSample-1))
+	bufferSize := uint(float64(ks.samplesPerSecond)/frequency + 0.5)
+	numberSamples := int(float64(ks.samplesPerSecond)*duration + 0.5)
+	buffer := NewKSBuffer(bufferSize)
+	for i := 0; i < numberSamples; i++ {
+		val := buffer.Value()
+		for i := uint8(0); i < ks.numChannels; i++ { // write one sample for each channel
+			u32Sample := uint32(val * volume) // bits per sample only supported multiples of 8 up to 32
+			if ks.bitsPerSample == 8 {
+				u32Sample += (1 << 7) // 8-bit is offset encoded
+				u32Sample %= (1 << 8)
+			}
+			for i := uint8(0); i < ks.bitsPerSample/8; i++ {
+				ks.data = append(ks.data, byte(u32Sample&0xFF))
+				u32Sample = u32Sample >> 8
+			}
+		}
+		buffer.Update()
+		buffer = buffer.Next()
+	}
 }
 
 type waveHeader struct {

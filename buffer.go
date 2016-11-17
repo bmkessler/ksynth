@@ -10,14 +10,14 @@ type KSBuffer struct {
 }
 
 // Decay is how much each sample decays during play
-var Decay = 0.996
+var Decay = 0.9996
 
 // NewKSBuffer initializes the buffer of size with random noise
 func NewKSBuffer(size uint) *KSBuffer {
 	// get a random number between -1.0 and 1.0
 	initialNode := &KSBuffer{value: rand.Float64()*2.0 - 1.0}
 	currentNode := initialNode
-	for i := uint(0); i < size; i++ {
+	for i := uint(0); i < size-1; i++ {
 		newNode := &KSBuffer{value: rand.Float64()*2.0 - 1.0}
 		currentNode.next = newNode
 		currentNode = newNode

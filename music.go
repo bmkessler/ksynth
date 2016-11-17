@@ -3,14 +3,17 @@ package ksynth
 import (
 	"fmt"
 	"math"
+	"regexp"
+	"strconv"
+	"strings"
 )
 
 // This file contains basic music functions for calculating frequencies and durations
 
 // CalculateFrequency calculates the frequency of any note and octave
-// integer notes 1 to 12 are the well-tempered scale with A4=440Hz
-func CalculateFrequency(note float64, octave uint) float64 {
-	return 440.0 * math.Pow(2.0, (float64(octave-4)*12+note)/12.0)
+// integer tones 1 to 12 are the well-tempered scale with A4=440Hz
+func CalculateFrequency(tone float64, octave int) float64 {
+	return 440.0 * math.Pow(2.0, (float64(octave-4)*12.0+tone)/12.0)
 }
 
 // Notation contains the mapping from ascii notes to numerical values
@@ -46,9 +49,9 @@ func NoteToTone(note string) (float64, error) {
 
 // BeatsPerNote contains the mapping from notes, whole, half, etc. to fraction of beat in 4/4
 var BeatsPerNote = map[string]float64{
-	"w": 4,
-	"h": 2,
-	"q": 1,
+	"w": 4.0,
+	"h": 2.0,
+	"q": 1.0,
 	"e": 0.5,
 	"s": 0.25,
 }
@@ -64,13 +67,13 @@ func NoteToBeats(note string) (float64, error) {
 // CalculateDuration returns how long a note lasts at a given tempo in bpm
 func CalculateDuration(beatsPerNote float64, beatsPerMinute float64) (float64, error) {
 	if beatsPerMinute <= 0.0 || beatsPerNote <= 0 {
-		return 0.0, fmt.Errorf("Both beatsPerNote: %f and beatsPerNote: %f must be positive", beatsPerNote, beatsPerMinute)
+		return 0.0, fmt.Errorf("Both beatsPerNote: %f and beatsPerMinute: %f must be positive", beatsPerNote, beatsPerMinute)
 	}
 	return beatsPerNote / (beatsPerMinute / 60.0), nil
 }
 
 // FrequencyDuration returns the frequency in Hz and length in seconds for a given note at given bpm
-func FrequencyDuration(pitch string, octave uint, note string, bpm float64) (float64, float64, error) {
+func FrequencyDuration(pitch string, octave int, note string, bpm float64) (float64, float64, error) {
 	beats, err := NoteToBeats(note)
 	if err != nil {
 		return 0.0, 0.0, err
@@ -85,4 +88,30 @@ func FrequencyDuration(pitch string, octave uint, note string, bpm float64) (flo
 	}
 	frequency := CalculateFrequency(tone, octave)
 	return frequency, duration, nil
+}
+
+// ParsedNote Represents a note from a string, may be refactor
+type ParsedNote struct {
+	Frequency float64
+	Duration  float64
+	Error     error
+}
+
+// ParseString will return a slice of ParsedNotes from an input string given a tempo in bpm
+func ParseString(input string, bpm float64) []ParsedNote {
+	output := []ParsedNote{}
+	noteRegEx := regexp.MustCompile(`^([A-G][#b]?)([0-9])([seqhw])$`)
+	for _, notation := range strings.Split(input, " ") { // input should be space delimited
+		noteParts := noteRegEx.FindStringSubmatch(notation)
+		if len(noteParts) == 4 {
+			pitch := noteParts[1]
+			octave, _ := strconv.ParseInt(noteParts[2], 10, 32) // will always succeed by [0-9] regex
+			beats := noteParts[3]
+			frequency, duration, err := FrequencyDuration(pitch, int(octave), beats, bpm)
+			output = append(output, ParsedNote{Frequency: frequency, Duration: duration, Error: err})
+		} else {
+			output = append(output, ParsedNote{0.0, 0.0, fmt.Errorf("%s was not parsable", notation)})
+		}
+	}
+	return output
 }
