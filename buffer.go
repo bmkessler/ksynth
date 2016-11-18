@@ -10,7 +10,7 @@ type KSBuffer struct {
 }
 
 // Decay is how much each sample decays during play
-var Decay = 0.9996
+var Decay = 0.996
 
 // NewKSBuffer initializes the buffer of size with random noise
 func NewKSBuffer(size uint) *KSBuffer {

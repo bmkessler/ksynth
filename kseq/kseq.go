@@ -7,7 +7,7 @@ import "log"
 import "path"
 
 func main() {
-	inputFile := flag.String("f", "input_seq.txt", "The input file to parse and create input_seq.wav")
+	inputFile := flag.String("f", "twinkle.txt", "The input file to parse and create input_seq.wav")
 	bpm := flag.Float64("bpm", 120, "The beats per minute to record the file at")
 	// WAV file parameters
 	sampleRate := flag.Uint("sr", 48000, "Sample rate in samples per second")
